@@ -23,7 +23,9 @@ DEFAULT_RUBRIC: dict[str, float] = {
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=(str(REPO_DIR / ".env"), ".env"), extra="ignore", case_sensitive=False
+        env_file=(str(REPO_DIR / ".env"), ".env"),
+        extra="ignore",
+        case_sensitive=False
     )
 
     # app
@@ -44,18 +46,27 @@ class Settings(BaseSettings):
     checkpoint_collection: str = "langgraph_checkpoints"
     checkpoint_writes_collection: str = "langgraph_checkpoint_writes"
 
-    # llm
+    # llm - Ollama Local
+    llm_provider: str = "ollama"
+    ollama_base_url: str = "http://localhost:11434"
+    ollama_model: str = "llama3.1:8b"
+
+    # Hugging Face (optional fallback)
     hf_token: str = ""
     llm_model_id: str = "meta-llama/Llama-3.1-8B-Instruct"
     hf_provider: str = "auto"
+
+    # generation settings
     llm_temperature: float = 0.3
     llm_max_new_tokens: int = 1024
     llm_max_retries: int = 3
-    llm_timeout_seconds: int = 60
+    llm_timeout_seconds: int = 120
 
     # embeddings / rerank
     embedding_model: str = "BAAI/bge-small-en-v1.5"
-    embedding_query_prefix: str = "Represent this sentence for searching relevant passages: "
+    embedding_query_prefix: str = (
+        "Represent this sentence for searching relevant passages: "
+    )
     embedding_device: str = "cpu"
     reranker_enabled: bool = True
     reranker_model: str = "BAAI/bge-reranker-base"
@@ -90,7 +101,7 @@ class Settings(BaseSettings):
     min_attempts_for_topic: int = 2
     memory_progress_keep: int = 20
 
-    # evaluation rubric (JSON object: criterion -> weight)
+    # evaluation rubric
     eval_rubric_json: str = ""
 
     # rate limiting
@@ -113,7 +124,8 @@ class Settings(BaseSettings):
     langsmith_api_key: str = ""
     langsmith_project: str = "rag-interview-prep"
 
-    # ---- derived helpers -------------------------------------------------
+    # ---- derived helpers ---------------------------------------------
+
     @staticmethod
     def _abs(p: str) -> Path:
         path = Path(p)
@@ -121,7 +133,11 @@ class Settings(BaseSettings):
 
     @property
     def cors_origin_list(self) -> list[str]:
-        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+        return [
+            o.strip()
+            for o in self.cors_origins.split(",")
+            if o.strip()
+        ]
 
     @property
     def upload_path(self) -> Path:
@@ -141,29 +157,46 @@ class Settings(BaseSettings):
 
     @property
     def resume_exts(self) -> set[str]:
-        return {e.strip().lower() for e in self.allowed_resume_types.split(",") if e.strip()}
+        return {
+            e.strip().lower()
+            for e in self.allowed_resume_types.split(",")
+            if e.strip()
+        }
 
     @property
     def doc_exts(self) -> set[str]:
-        return {e.strip().lower() for e in self.allowed_doc_types.split(",") if e.strip()}
+        return {
+            e.strip().lower()
+            for e in self.allowed_doc_types.split(",")
+            if e.strip()
+        }
 
     @property
     def eval_rubric(self) -> dict[str, float]:
         if self.eval_rubric_json.strip():
             try:
                 data: Any = json.loads(self.eval_rubric_json)
-                rubric = {str(k): float(v) for k, v in data.items() if float(v) > 0}
+                rubric = {
+                    str(k): float(v)
+                    for k, v in data.items()
+                    if float(v) > 0
+                }
                 if rubric:
                     return rubric
             except (ValueError, TypeError, AttributeError):
                 pass
+
         return dict(DEFAULT_RUBRIC)
 
     @property
     def mcp_urls(self) -> dict[str, str]:
         if self.mcp_mode == "embedded":
             base = self.backend_url.rstrip("/")
-            return {n: f"{base}/mcp-servers/{n}/mcp" for n in ("resume", "questions", "analytics", "jd")}
+            return {
+                n: f"{base}/mcp-servers/{n}/mcp"
+                for n in ("resume", "questions", "analytics", "jd")
+            }
+
         return {
             "resume": self.mcp_resume_url,
             "questions": self.mcp_questions_url,
@@ -172,8 +205,13 @@ class Settings(BaseSettings):
         }
 
     def validate_for_runtime(self) -> None:
-        if self.app_env == "production" and self.jwt_secret_key.startswith("change-me"):
-            raise RuntimeError("Set a strong JWT_SECRET_KEY before running in production.")
+        if (
+            self.app_env == "production"
+            and self.jwt_secret_key.startswith("change-me")
+        ):
+            raise RuntimeError(
+                "Set a strong JWT_SECRET_KEY before running in production."
+            )
 
 
 @lru_cache
