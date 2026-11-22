@@ -1,4 +1,6 @@
+
 """Centralised configuration. Every tunable lives here and is read from environment / .env."""
+
 from __future__ import annotations
 
 import json
@@ -22,114 +24,179 @@ DEFAULT_RUBRIC: dict[str, float] = {
 
 
 class Settings(BaseSettings):
+
     model_config = SettingsConfigDict(
         env_file=(str(REPO_DIR / ".env"), ".env"),
         extra="ignore",
         case_sensitive=False
     )
 
-    # app
+    # --------------------------------------------------
+    # APP
+    # --------------------------------------------------
+
     app_env: str = "development"
     log_level: str = "INFO"
     backend_url: str = "http://localhost:8000"
     cors_origins: str = "http://localhost:8501"
 
-    # auth
+    # --------------------------------------------------
+    # AUTHENTICATION
+    # --------------------------------------------------
+
     jwt_secret_key: str = "change-me-with-openssl-rand-hex-32"
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
 
-    # mongo
+    # --------------------------------------------------
+    # MONGODB
+    # --------------------------------------------------
+
     mongodb_uri: str = "mongodb://localhost:27017"
     mongodb_db_name: str = "interview_prep"
-    checkpointer: str = "mongo"  # mongo | memory
+
+    checkpointer: str = "mongo"
     checkpoint_collection: str = "langgraph_checkpoints"
     checkpoint_writes_collection: str = "langgraph_checkpoint_writes"
 
-    # llm - Ollama Local
+    # --------------------------------------------------
+    # LLM PROVIDER CONFIGURATION
+    # --------------------------------------------------
+
+    # Supported providers: ollama | gemini | huggingface
     llm_provider: str = "ollama"
+
+    # Ollama - Local development
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "llama3.1:8b"
 
-    # Hugging Face (optional fallback)
+    # Google Gemini - Cloud deployment
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-3.5-flash-lite"
+
+    # Hugging Face - Optional fallback
     hf_token: str = ""
     llm_model_id: str = "meta-llama/Llama-3.1-8B-Instruct"
     hf_provider: str = "auto"
 
-    # generation settings
+    # Generation settings
     llm_temperature: float = 0.3
     llm_max_new_tokens: int = 1024
     llm_max_retries: int = 3
     llm_timeout_seconds: int = 120
 
-    # embeddings / rerank
+    # --------------------------------------------------
+    # EMBEDDINGS AND RERANKING
+    # --------------------------------------------------
+
     embedding_model: str = "BAAI/bge-small-en-v1.5"
+
     embedding_query_prefix: str = (
         "Represent this sentence for searching relevant passages: "
     )
+
     embedding_device: str = "cpu"
+
     reranker_enabled: bool = True
     reranker_model: str = "BAAI/bge-reranker-base"
 
-    # vector store
-    vector_store: str = "chroma"  # chroma | faiss
-    chroma_mode: str = "persistent"  # persistent | http
+    # --------------------------------------------------
+    # VECTOR STORE
+    # --------------------------------------------------
+
+    vector_store: str = "chroma"
+    chroma_mode: str = "persistent"
     chroma_persist_dir: str = "./data/chroma"
+
     chroma_host: str = "localhost"
     chroma_port: int = 8001
     chroma_collection: str = "study_materials"
+
     faiss_index_dir: str = "./data/faiss"
+
     chunk_size: int = 1000
     chunk_overlap: int = 150
+
     retrieval_top_k: int = 8
     rerank_top_n: int = 4
+
     similarity_threshold: float = 0.35
     rag_allow_general_fallback: bool = True
 
-    # uploads
+    # --------------------------------------------------
+    # UPLOADS
+    # --------------------------------------------------
+
     upload_dir: str = "./data/uploads"
     max_upload_mb: int = 10
+
     allowed_resume_types: str = "pdf"
     allowed_doc_types: str = "pdf,txt,docx"
 
-    # adaptive difficulty / memory
+    # --------------------------------------------------
+    # ADAPTIVE DIFFICULTY AND MEMORY
+    # --------------------------------------------------
+
     difficulty_up_threshold: float = 8.0
     difficulty_down_threshold: float = 5.0
     difficulty_window: int = 3
+
     weak_topic_threshold: float = 6.0
     strong_topic_threshold: float = 8.0
+
     min_attempts_for_topic: int = 2
     memory_progress_keep: int = 20
 
-    # evaluation rubric
+    # --------------------------------------------------
+    # EVALUATION RUBRIC
+    # --------------------------------------------------
+
     eval_rubric_json: str = ""
 
-    # rate limiting
+    # --------------------------------------------------
+    # RATE LIMITING
+    # --------------------------------------------------
+
     rate_limit_enabled: bool = True
     rate_limit_default: str = "300/minute"
     rate_limit_auth: str = "10/minute"
 
+    # --------------------------------------------------
     # MCP
-    mcp_mode: str = "embedded"  # embedded | external | disabled
+    # --------------------------------------------------
+
+    mcp_mode: str = "embedded"
     mcp_fallback_local: bool = True
+
     mcp_resume_url: str = "http://localhost:8101/mcp"
     mcp_questions_url: str = "http://localhost:8102/mcp"
     mcp_analytics_url: str = "http://localhost:8103/mcp"
     mcp_jd_url: str = "http://localhost:8104/mcp"
+
     mcp_internal_token: str = "change-me-shared-secret"
     mcp_timeout_seconds: int = 90
 
-    # langsmith
+    # --------------------------------------------------
+    # LANGSMITH
+    # --------------------------------------------------
+
     langsmith_tracing: bool = False
     langsmith_api_key: str = ""
     langsmith_project: str = "rag-interview-prep"
 
-    # ---- derived helpers ---------------------------------------------
+    # --------------------------------------------------
+    # DERIVED HELPERS
+    # --------------------------------------------------
 
     @staticmethod
     def _abs(p: str) -> Path:
         path = Path(p)
-        return path if path.is_absolute() else (REPO_DIR / path).resolve()
+
+        return (
+            path
+            if path.is_absolute()
+            else (REPO_DIR / path).resolve()
+        )
 
     @property
     def cors_origin_list(self) -> list[str]:
@@ -173,16 +240,21 @@ class Settings(BaseSettings):
 
     @property
     def eval_rubric(self) -> dict[str, float]:
+
         if self.eval_rubric_json.strip():
+
             try:
                 data: Any = json.loads(self.eval_rubric_json)
+
                 rubric = {
                     str(k): float(v)
                     for k, v in data.items()
                     if float(v) > 0
                 }
+
                 if rubric:
                     return rubric
+
             except (ValueError, TypeError, AttributeError):
                 pass
 
@@ -190,8 +262,11 @@ class Settings(BaseSettings):
 
     @property
     def mcp_urls(self) -> dict[str, str]:
+
         if self.mcp_mode == "embedded":
+
             base = self.backend_url.rstrip("/")
+
             return {
                 n: f"{base}/mcp-servers/{n}/mcp"
                 for n in ("resume", "questions", "analytics", "jd")
@@ -205,6 +280,7 @@ class Settings(BaseSettings):
         }
 
     def validate_for_runtime(self) -> None:
+
         if (
             self.app_env == "production"
             and self.jwt_secret_key.startswith("change-me")

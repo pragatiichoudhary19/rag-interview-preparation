@@ -48,3 +48,4 @@ langchain-mcp-adapters>=0.3
 # --- Testing ---
 pytest>=8.0
 pytest-asyncio>=0.23
+langchain-google-genai

@@ -1,13 +1,15 @@
 
-"""Modular LLM service supporting Ollama and Hugging Face.
+"""Modular LLM service supporting Gemini, Ollama and Hugging Face.
 
 * Provider and model are configured through environment settings.
+* Gemini is used for cloud deployment.
 * Ollama runs locally without API credits.
 * Hugging Face remains available as an optional provider.
 * Retries with backoff on 429/5xx/timeouts.
 * Maps authentication and model errors to application exceptions.
 * ajson provides schema-validated structured output with one repair retry.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -73,7 +75,7 @@ def _status(exc: BaseException) -> int | None:
     response = getattr(exc, "response", None)
     value = getattr(response, "status_code", None)
 
-    if isinstance(value, int):
+    if isinstance(value, int) and 400 <= value < 600:
         return value
 
     match = _STATUS_RE.search(str(exc)[:400])
@@ -136,6 +138,12 @@ def _to_error(
                 "Check your token permissions and model access."
             )
 
+        if provider == "gemini":
+            return LLMConfigError(
+                "Gemini rejected the API key or request. "
+                "Check GEMINI_API_KEY and your API access."
+            )
+
         return LLMConfigError(
             "Authentication or permission error from Ollama. "
             "Check your Ollama server configuration."
@@ -144,23 +152,23 @@ def _to_error(
     if code == 404:
         return LLMConfigError(
             "The requested model was not found. "
-            "Check the model name and run ollama pull if using Ollama."
+            "Check the configured model name."
         )
 
     if code == 429:
         return LLMRateLimitError(
             "The LLM provider is rate limiting requests. "
-            "Please retry shortly."
+            "Please retry shortly or check your API quota."
         )
 
     return LLMUnavailableError(
         "The LLM is temporarily unavailable. "
-        "Check that the model server is running and try again."
+        "Check the provider configuration and try again."
     )
 
 
 class LLMService:
-    """LLM service with Ollama and Hugging Face support."""
+    """LLM service supporting Gemini, Ollama and Hugging Face."""
 
     def __init__(
         self,
@@ -187,6 +195,42 @@ class LLMService:
 
         s = self.settings
         provider = s.llm_provider.lower().strip()
+
+        # -----------------------------------------
+        # Gemini - Cloud LLM
+        # -----------------------------------------
+
+        if provider == "gemini":
+
+            if not s.gemini_api_key:
+                raise LLMConfigError(
+                    "GEMINI_API_KEY is not configured."
+                )
+
+            try:
+                from langchain_google_genai import (
+                    ChatGoogleGenerativeAI,
+                )
+            except ImportError as exc:
+                raise LLMConfigError(
+                    "Gemini integration is missing. "
+                    "Install it using: "
+                    "pip install langchain-google-genai"
+                ) from exc
+
+            log.info(
+                "Initializing Gemini model: %s",
+                s.gemini_model,
+            )
+
+            return ChatGoogleGenerativeAI(
+                model=s.gemini_model,
+                google_api_key=s.gemini_api_key,
+                temperature=s.llm_temperature,
+                max_output_tokens=s.llm_max_new_tokens,
+                timeout=s.llm_timeout_seconds,
+                max_retries=0,
+            )
 
         # -----------------------------------------
         # Ollama - Local LLM
@@ -365,7 +409,7 @@ class LLMService:
                         provider,
                     ) from exc
 
-                delay = min(2**attempt, 8) + random.random() * 0.3
+                delay = min(5 * (2**attempt), 60) + random.random()
 
                 await asyncio.sleep(delay)
 
