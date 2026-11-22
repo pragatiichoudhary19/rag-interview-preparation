@@ -10,8 +10,10 @@ from typing import Any
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 REPO_DIR = BACKEND_DIR.parent
+
 
 DEFAULT_RUBRIC: dict[str, float] = {
     "technical_correctness": 0.30,
@@ -28,7 +30,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=(str(REPO_DIR / ".env"), ".env"),
         extra="ignore",
-        case_sensitive=False
+        case_sensitive=False,
     )
 
     # --------------------------------------------------
@@ -64,7 +66,8 @@ class Settings(BaseSettings):
     # --------------------------------------------------
 
     # Supported providers: ollama | gemini | huggingface
-    llm_provider: str = "ollama"
+    # Gemini is the default for cloud deployment.
+    llm_provider: str = "gemini"
 
     # Ollama - Local development
     ollama_base_url: str = "http://localhost:11434"
@@ -74,7 +77,7 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     gemini_model: str = "gemini-3.5-flash-lite"
 
-    # Hugging Face - Optional fallback
+    # Hugging Face - Optional provider
     hf_token: str = ""
     llm_model_id: str = "meta-llama/Llama-3.1-8B-Instruct"
     hf_provider: str = "auto"
@@ -201,9 +204,9 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [
-            o.strip()
-            for o in self.cors_origins.split(",")
-            if o.strip()
+            origin.strip()
+            for origin in self.cors_origins.split(",")
+            if origin.strip()
         ]
 
     @property
@@ -225,17 +228,17 @@ class Settings(BaseSettings):
     @property
     def resume_exts(self) -> set[str]:
         return {
-            e.strip().lower()
-            for e in self.allowed_resume_types.split(",")
-            if e.strip()
+            ext.strip().lower()
+            for ext in self.allowed_resume_types.split(",")
+            if ext.strip()
         }
 
     @property
     def doc_exts(self) -> set[str]:
         return {
-            e.strip().lower()
-            for e in self.allowed_doc_types.split(",")
-            if e.strip()
+            ext.strip().lower()
+            for ext in self.allowed_doc_types.split(",")
+            if ext.strip()
         }
 
     @property
@@ -247,9 +250,9 @@ class Settings(BaseSettings):
                 data: Any = json.loads(self.eval_rubric_json)
 
                 rubric = {
-                    str(k): float(v)
-                    for k, v in data.items()
-                    if float(v) > 0
+                    str(key): float(value)
+                    for key, value in data.items()
+                    if float(value) > 0
                 }
 
                 if rubric:
@@ -268,8 +271,8 @@ class Settings(BaseSettings):
             base = self.backend_url.rstrip("/")
 
             return {
-                n: f"{base}/mcp-servers/{n}/mcp"
-                for n in ("resume", "questions", "analytics", "jd")
+                name: f"{base}/mcp-servers/{name}/mcp"
+                for name in ("resume", "questions", "analytics", "jd")
             }
 
         return {
@@ -288,6 +291,12 @@ class Settings(BaseSettings):
             raise RuntimeError(
                 "Set a strong JWT_SECRET_KEY before running in production."
             )
+
+        if self.llm_provider.lower().strip() == "gemini":
+            if not self.gemini_api_key.strip():
+                raise RuntimeError(
+                    "GEMINI_API_KEY must be configured when using Gemini."
+                )
 
 
 @lru_cache
